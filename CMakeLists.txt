@@ -14,6 +14,7 @@ find_package(Vulkan MODULE REQUIRED)
 find_package(SDL2 CONFIG REQUIRED)
 
 add_subdirectory(src)
+add_subdirectory(external)
 
 add_executable(VulkanPlayground main.cpp)
 target_link_libraries(VulkanPlayground PRIVATE BaseEngine)
