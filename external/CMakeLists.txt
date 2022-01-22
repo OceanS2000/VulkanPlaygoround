@@ -1,4 +1,4 @@
-add_library(vma OBJECT
+add_library(vma STATIC
         vma/vm_mem_alloc.cpp)
 
 target_compile_definitions(vma PRIVATE

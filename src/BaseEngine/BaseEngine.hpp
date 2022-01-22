@@ -5,10 +5,14 @@
 #ifndef VULKANPLAYGROUND_SRC_BASEENGINE_BASEENGINE_HPP
 #define VULKANPLAYGROUND_SRC_BASEENGINE_BASEENGINE_HPP
 
+#include <array>
 #include <vector>
 
 #include <vulkan/vulkan.hpp>
 #include <SDL.h>
+#include <vk_mem_alloc.h>
+
+#include "ImgSyncer.hpp"
 
 namespace VulkanPlayground
 {
@@ -41,7 +45,11 @@ namespace VulkanPlayground
 		vk::Device device_;
 		uint32_t graphicsQF_ = badQF;
 		vk::Queue graphicsQ_;
-		vk::CommandPool cmdPool_;
+		vk::CommandPool graphicsCmdPool_;
+
+		std::array<ImgSyncer, 2> syncObjs_;
+
+		VmaAllocator vma_;
 
 		std::unique_ptr<Presenter> presenter_;
 

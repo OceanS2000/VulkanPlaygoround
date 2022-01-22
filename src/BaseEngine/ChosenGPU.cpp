@@ -63,10 +63,39 @@ void BaseEngine::ChooseGPU(const std::function<int(const vk::PhysicalDevice&)>& 
 	graphicsQ_ = device_.getQueue(graphicsQF_, 0);
 	VULKAN_HPP_DEFAULT_DISPATCHER.init(device_);
 
-	cmdPool_ = device_.createCommandPool({
+	graphicsCmdPool_ = device_.createCommandPool({
 		vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
 		graphicsQF_
 	});
+
+	{
+		VmaVulkanFunctions vulkanFunc = {
+			.vkGetInstanceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetInstanceProcAddr,
+			.vkGetDeviceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetDeviceProcAddr
+		};
+
+		VmaAllocatorCreateInfo vmaCreat = {
+			.physicalDevice = chosenGPU_,
+			.device = device_,
+			.pVulkanFunctions = &vulkanFunc,
+			.instance = instance_,
+			.vulkanApiVersion = VK_API_VERSION_1_2
+		};
+
+		const auto res = vmaCreateAllocator(&vmaCreat, &vma_);
+		if (res != VK_SUCCESS) {
+			spdlog::error("Failed to create memory allocator");
+			std::terminate();
+		}
+	}
+
+	for (auto& syncObj : syncObjs_) {
+		syncObj = {
+			.renderComplete = device_.createSemaphore({}),
+			.imageAvailable = device_.createSemaphore({}),
+			.imageDone = device_.createFence({vk::FenceCreateFlagBits::eSignaled})
+		};
+	}
 }
 
 void BaseEngine::initPresenter() {

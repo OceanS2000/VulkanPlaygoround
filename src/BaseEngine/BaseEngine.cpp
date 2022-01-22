@@ -95,7 +95,14 @@ BaseEngine::BaseEngine()
 BaseEngine::~BaseEngine()
 {
 	presenter_.reset(nullptr);
-	device_.destroy(cmdPool_);
+	for (auto& syncObj : syncObjs_) {
+		auto [sem1, sem2, fence] = syncObj;
+		device_.destroy(fence);
+		device_.destroy(sem2);
+		device_.destroy(sem1);
+	}
+	device_.destroy(graphicsCmdPool_);
+	vmaDestroyAllocator(vma_);
 	device_.destroy();
 	instance_.destroy(surface_);
 	instance_.destroy(debugMsg_);
@@ -120,6 +127,8 @@ void BaseEngine::run()
 				return;
 			}
 		}
+
+		presenter_->Run();
 	}
 }
 

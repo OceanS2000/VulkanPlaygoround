@@ -8,6 +8,9 @@
 #include <cstdint>
 
 #include <vulkan/vulkan.hpp>
+#include <vk_mem_alloc.h>
+
+#include "Vertex.hpp"
 
 namespace VulkanPlayground
 {
@@ -24,6 +27,8 @@ namespace VulkanPlayground
 		Presenter& operator=(const Presenter&) = delete;
 		Presenter& operator=(Presenter&&) = delete;
 
+		bool Run();
+
 	private:
 		const BaseEngine& engine_;
 		const vk::Device& device_;
@@ -31,9 +36,22 @@ namespace VulkanPlayground
 		vk::SwapchainKHR swapchain_;
 		std::vector<vk::Image> images_;
 		std::vector<vk::ImageView> imageViews_;
+		std::vector<vk::Framebuffer> swapchainFramebuffer_;
+
+		vk::RenderPass renderPass_;
+		vk::PipelineLayout pipelineLayout_;
+		vk::Pipeline pipeline_;
+
+		vk::Buffer vertexBuffer_;
+		VmaAllocation bufferAlloc_;
+		VmaAllocationInfo bufferAllocInfo_;
+
+		std::array<vk::CommandBuffer, 2> cmdBuffer_;
 
 		vk::Extent2D extent_;
 		vk::Format format_;
+
+		unsigned int frameCnt;
 
 		friend BaseEngine;
 	};
