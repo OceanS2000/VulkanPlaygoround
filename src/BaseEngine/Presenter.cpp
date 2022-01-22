@@ -34,7 +34,7 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 		const auto& surface = engine_.surface_;
 
 		// Determine Present mode
-		auto presentMode = vk::PresentModeKHR::eFifo;
+		auto presentMode = vk::PresentModeKHR::eMailbox;
 		{
 			using enum vk::PresentModeKHR;
 			const auto& presentSup = phyDevice.getSurfacePresentModesKHR(surface);
@@ -308,12 +308,13 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 
 		// Allocate Vertex Buffer
 		{
+			using enum vk::MemoryPropertyFlagBits;
 			VmaAllocationCreateInfo vmalloc = {
 				.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT,
 				.usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-				.requiredFlags = (VkMemoryPropertyFlags)vk::MemoryPropertyFlagBits::eDeviceLocal,
-				.preferredFlags = (VkMemoryPropertyFlags)(vk::MemoryPropertyFlagBits::eHostCoherent
-					| vk::MemoryPropertyFlagBits::eHostVisible),
+				.requiredFlags =
+					(VkMemoryPropertyFlags)(eHostCoherent | eHostVisible),
+				.preferredFlags = (VkMemoryPropertyFlags)(eDeviceLocal),
 			};
 
 			auto bufferCreate = (VkBufferCreateInfo)vk::BufferCreateInfo {
@@ -415,7 +416,8 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 			}};
 
 		auto vertices = static_cast<Vertex *>(bufferAllocInfo_.pMappedData);
-		float color = static_cast<float>(frameCnt % 120) / 120.0f;
+		float color = static_cast<float>(frameCnt % 240) / 120.0f;
+		if (color > 1.0f) color = 2.0f - color;
 		vertices[1].color = {color, 1.0f - color, 0.0f};
 		vertices[4].color = {color, 1.0f - color, 0.0f};
 
@@ -454,18 +456,23 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 		};
 		device_.resetFences(1, &imageDone);
 		engine_.graphicsQ_.submit(submit, imageDone);
-		result1 = engine_.graphicsQ_.presentKHR(
-			{
-				1, &renderComplete,
-				1, &swapchain_,
-				&curimg, nullptr
-		});
-		if(result1 != vk::Result::eSuccess) {
-			spdlog::error("Present Failure");
+		frameCnt++;
+		try {
+			result1 = engine_.graphicsQ_.presentKHR(
+				{
+					1, &renderComplete,
+					1, &swapchain_,
+					&curimg, nullptr
+				});
+			if (result1 != vk::Result::eSuccess) {
+				spdlog::info("Get suboptimal result");
+				return true;
+			}
+		} catch (vk::OutOfDateKHRError& e) {
+			spdlog::info("Get out of date image");
 			return true;
 		}
 
-		frameCnt++;
 		return false;
 	}
 }

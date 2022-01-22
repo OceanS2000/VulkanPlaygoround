@@ -5,6 +5,8 @@
 #include "BaseEngine.hpp"
 
 #include <array>
+#include <chrono>
+#include <thread>
 #include <vector>
 #include <stdexcept>
 
@@ -35,7 +37,7 @@ BaseEngine::BaseEngine()
 	window_ = SDL_CreateWindow("Hello?",
 		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
 		640, 480,
-		SDL_WINDOW_VULKAN);
+		SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 
 	if (!window_) {
 		spdlog::error("Failed to create SDL window: {}", SDL_GetError());
@@ -72,7 +74,7 @@ BaseEngine::BaseEngine()
 		},
 		vk::DebugUtilsMessengerCreateInfoEXT {
 			{},
-			eError | eWarning | eInfo | eVerbose,
+			eError | eWarning | eInfo,// | eVerbose,
 			eGeneral | eValidation | ePerformance,
 			Debug::VulkanDebugCallback
 		}
@@ -120,15 +122,32 @@ void BaseEngine::run()
 	}
 	SDL_Event event;
 
+	using namespace std::chrono_literals;
+	auto lastframe = std::chrono::steady_clock::now();
+	auto targettime = 16.667ms;
+
 	while (true) {
 		while (SDL_PollEvent(&event)) {
 			switch (event.type) {
 			case SDL_QUIT:
 				return;
+			case SDL_WINDOWEVENT:
+				switch (event.window.event) {
+					case SDL_WINDOWEVENT_RESIZED:
+						presenter_ = std::make_unique<Presenter>(*this, presenter_.get());
+				}
 			}
 		}
 
-		presenter_->Run();
+		auto time = std::chrono::steady_clock::now();
+		std::this_thread::sleep_for(targettime - (time - lastframe));
+		lastframe = std::chrono::steady_clock::now();
+
+		if (presenter_->Run()){
+			auto windowflags = SDL_GetWindowFlags(window_);
+			if (windowflags & SDL_WINDOW_MINIMIZED) continue;
+			presenter_ = std::make_unique<Presenter>(*this, presenter_.get());
+		}
 	}
 }
 
