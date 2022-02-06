@@ -6,6 +6,7 @@
 #define VULKANPLAYGROUND_SRC_BASEENGINE_BASEENGINE_HPP
 
 #include <array>
+#include <bitset>
 #include <vector>
 
 #include <vulkan/vulkan.hpp>
@@ -13,6 +14,7 @@
 #include <vk_mem_alloc.h>
 
 #include "ImgSyncer.hpp"
+#include "Scene.hpp"
 
 namespace VulkanPlayground
 {
@@ -40,12 +42,14 @@ namespace VulkanPlayground
 		vk::Instance instance_;
 		vk::DebugUtilsMessengerEXT debugMsg_;
 		vk::SurfaceKHR surface_;
+		vk::SurfaceFormatKHR surfaceFmt_;
 
 		vk::PhysicalDevice chosenGPU_;
 		vk::Device device_;
 		uint32_t graphicsQF_ = badQF;
 		vk::Queue graphicsQ_;
 		vk::CommandPool graphicsCmdPool_;
+		vk::RenderPass renderPass_;
 
 		std::array<ImgSyncer, 2> syncObjs_;
 
@@ -53,6 +57,11 @@ namespace VulkanPlayground
 
 		std::unique_ptr<Presenter> presenter_;
 
+		std::bitset<4> arrowKey_;
+		std::array<int, 2> winSize_ = {640, 480};
+		std::array<int, 2> viewCenter_ = {0, 0};
+
+		friend Scene;
 		friend Presenter;
 	};
 }

@@ -36,7 +36,7 @@ BaseEngine::BaseEngine()
 
 	window_ = SDL_CreateWindow("Hello?",
 		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-		640, 480,
+		winSize_[0], winSize_[1],
 		SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 
 	if (!window_) {
@@ -103,6 +103,7 @@ BaseEngine::~BaseEngine()
 		device_.destroy(sem2);
 		device_.destroy(sem1);
 	}
+	device_.destroy(renderPass_);
 	device_.destroy(graphicsCmdPool_);
 	vmaDestroyAllocator(vma_);
 	device_.destroy();
@@ -134,10 +135,54 @@ void BaseEngine::run()
 			case SDL_WINDOWEVENT:
 				switch (event.window.event) {
 					case SDL_WINDOWEVENT_RESIZED:
-						presenter_ = std::make_unique<Presenter>(*this, presenter_.get());
+						winSize_ = {event.window.data1, event.window.data2};
+						initPresenter();
+						auto time = std::chrono::steady_clock::now();
+						std::this_thread::sleep_for(targettime - (time - lastframe));
+						lastframe = std::chrono::steady_clock::now();
+						continue;
 				}
+			case SDL_KEYDOWN:
+				switch (event.key.keysym.sym) {
+					case SDLK_DOWN:
+						arrowKey_[0] = true;
+						break;
+					case SDLK_UP:
+						arrowKey_[1] = true;
+						break;
+					case SDLK_LEFT:
+						arrowKey_[2] = true;
+						break;
+					case SDLK_RIGHT:
+						arrowKey_[3] = true;
+						break;
+				}
+				break;
+			case SDL_KEYUP:
+				switch (event.key.keysym.sym) {
+					case SDLK_DOWN:
+						arrowKey_[0] = false;
+						break;
+					case SDLK_UP:
+						arrowKey_[1] = false;
+						break;
+					case SDLK_LEFT:
+						arrowKey_[2] = false;
+						break;
+					case SDLK_RIGHT:
+						arrowKey_[3] = false;
+						break;
+				}
+				break;
 			}
 		}
+
+		if (arrowKey_[0]) viewCenter_[1] -= 5;
+		if (arrowKey_[1]) viewCenter_[1] += 5;
+		if (arrowKey_[2]) viewCenter_[0] += 5;
+		if (arrowKey_[3]) viewCenter_[0] -= 5;
+		viewCenter_[0] = std::clamp(viewCenter_[0], -winSize_[0], winSize_[0]);
+		viewCenter_[1] = std::clamp(viewCenter_[1], -winSize_[1], winSize_[1]);
 
 		auto time = std::chrono::steady_clock::now();
 		std::this_thread::sleep_for(targettime - (time - lastframe));
@@ -146,7 +191,7 @@ void BaseEngine::run()
 		if (presenter_->Run()){
 			auto windowflags = SDL_GetWindowFlags(window_);
 			if (windowflags & SDL_WINDOW_MINIMIZED) continue;
-			presenter_ = std::make_unique<Presenter>(*this, presenter_.get());
+			initPresenter();
 		}
 	}
 }

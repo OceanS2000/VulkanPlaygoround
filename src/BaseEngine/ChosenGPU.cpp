@@ -16,12 +16,20 @@ namespace VulkanPlayground
 
 void BaseEngine::ChooseGPU(const std::function<int(const vk::PhysicalDevice&)>& pref) {
 	auto availGPUs = instance_.enumeratePhysicalDevices();
-	std::sort(availGPUs.begin(), availGPUs.end(),
-		[=](const auto& lhs, const auto& rhs) {
-		return pref(lhs) > pref(rhs);
-	});
+	if (availGPUs.empty()) {
+		spdlog::error("No available PhysicalDevice");
+		std::terminate();
+	}
 
-	chosenGPU_ = vk::PhysicalDevice { availGPUs.front() };
+	unsigned best = 0; int bestScore = -1;
+	for (unsigned i = 0; i < availGPUs.size(); i++) {
+		int score = pref(availGPUs[i]);
+		if (bestScore < score) {
+			best = i;
+		}
+	}
+
+	chosenGPU_ = vk::PhysicalDevice { availGPUs[best] };
 	const auto& bestGPU = chosenGPU_;
 
 	const auto& GPUProp = bestGPU.getProperties();
@@ -96,6 +104,76 @@ void BaseEngine::ChooseGPU(const std::function<int(const vk::PhysicalDevice&)>& 
 			.imageDone = device_.createFence({vk::FenceCreateFlagBits::eSignaled})
 		};
 	}
+
+
+	// Determine Surface Format
+	surfaceFmt_ = { vk::Format::eB8G8R8A8Unorm, vk::ColorSpaceKHR::eSrgbNonlinear };
+	{
+		using enum vk::Format;
+		using enum vk::ColorSpaceKHR;
+		const auto formatSups = chosenGPU_.getSurfaceFormatsKHR(surface_);
+#if 0
+		spdlog::info("Following format available:");
+			for (const auto& formatSup : formatSups) {
+				spdlog::info("\t[{} | {}]", to_string(formatSup.format), to_string(formatSup.colorSpace));
+			}
+#endif
+		if (std::find(formatSups.begin(), formatSups.end(), surfaceFmt_) == formatSups.end()) {
+			spdlog::error("The GPU does not support specified surface format");
+		}
+	}
+
+	// Create Renderpass
+	{
+		std::array<vk::AttachmentDescription,1> attachment {
+			{
+				{
+					{},
+					surfaceFmt_.format,
+					vk::SampleCountFlagBits::e1,
+					vk::AttachmentLoadOp::eClear,
+					vk::AttachmentStoreOp::eStore,
+					vk::AttachmentLoadOp::eDontCare,
+					vk::AttachmentStoreOp::eDontCare,
+					vk::ImageLayout::eUndefined,
+					vk::ImageLayout::ePresentSrcKHR}
+			}};
+
+		std::array<vk::AttachmentReference, 1> colorAttachRef = {
+			{
+				{
+					0,
+					vk::ImageLayout::eColorAttachmentOptimal
+				}
+			}};
+
+		std::array<vk::SubpassDescription, 1> subpass = {
+			{
+				{
+					{}, vk::PipelineBindPoint::eGraphics,
+					nullptr,
+					colorAttachRef
+				}
+			}};
+
+		using enum vk::PipelineStageFlagBits;
+		std::array<vk::SubpassDependency, 1> dependency = {
+			{
+				{
+					VK_SUBPASS_EXTERNAL, 0,
+					eColorAttachmentOutput, eColorAttachmentOutput,
+					{}, vk::AccessFlagBits::eColorAttachmentWrite,
+					{}
+				}
+			}};
+
+		renderPass_ = device_.createRenderPass(
+			{
+				{}, attachment, subpass, dependency
+			});
+	}
+
+	initPresenter();
 }
 
 void BaseEngine::initPresenter() {

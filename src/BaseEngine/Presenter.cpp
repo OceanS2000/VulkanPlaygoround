@@ -27,11 +27,14 @@ constexpr static std::array<Vertex, 6> defaultVertices {
 	}
 };
 
+static glm::vec2 norView;
+
 Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 	: engine_(engine), device_(engine_.device_)
 	{
 		const auto& phyDevice = engine_.chosenGPU_;
 		const auto& surface = engine_.surface_;
+		const auto& format = engine_.surfaceFmt_;
 
 		// Determine Present mode
 		auto presentMode = vk::PresentModeKHR::eMailbox;
@@ -45,25 +48,6 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 				}
 			}
 			spdlog::debug("Using present mode {}", to_string(presentMode));
-		}
-
-		// Determine Surface Format
-		vk::SurfaceFormatKHR format { vk::Format::eB8G8R8A8Unorm, vk::ColorSpaceKHR::eSrgbNonlinear };
-		{
-			using enum vk::Format;
-			using enum vk::ColorSpaceKHR;
-			const auto formatSups = phyDevice.getSurfaceFormatsKHR(surface);
-#if 0
-			spdlog::info("Following format available:");
-			for (const auto& formatSup : formatSups) {
-				spdlog::info("\t[{} | {}]", to_string(formatSup.format), to_string(formatSup.colorSpace));
-			}
-#endif
-			if (std::find(formatSups.begin(), formatSups.end(), format) == formatSups.end()) {
-				spdlog::error("The GPU does not support specified surface format");
-			}
-
-			format_ = eB8G8R8A8Unorm;
 		}
 
 		// Determine image extent and count
@@ -113,56 +97,7 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 			});
 		}
 
-		// Create Renderpass
-		{
-			std::array<vk::AttachmentDescription,1> attachment = {
-				{
-					{
-						{},
-						format_,
-						vk::SampleCountFlagBits::e1,
-						vk::AttachmentLoadOp::eClear,
-						vk::AttachmentStoreOp::eStore,
-						vk::AttachmentLoadOp::eDontCare,
-						vk::AttachmentStoreOp::eDontCare,
-						vk::ImageLayout::eUndefined,
-						vk::ImageLayout::ePresentSrcKHR}
-				}};
-
-			std::array<vk::AttachmentReference, 1> colorAttachRef = {
-				{
-					{
-						0,
-						vk::ImageLayout::eColorAttachmentOptimal
-					}
-				}};
-
-			std::array<vk::SubpassDescription, 1> subpass = {
-				{
-					{
-						{}, vk::PipelineBindPoint::eGraphics,
-						nullptr,
-						colorAttachRef
-					}
-				}};
-
-			using enum vk::PipelineStageFlagBits;
-			std::array<vk::SubpassDependency, 1> dependency = {
-				{
-					{
-						VK_SUBPASS_EXTERNAL, 0,
-						eColorAttachmentOutput, eColorAttachmentOutput,
-						{}, vk::AccessFlagBits::eColorAttachmentWrite,
-						{}
-					}
-				}};
-
-			renderPass_ = device_.createRenderPass(
-				{
-					{}, attachment, subpass, dependency
-				});
-		}
-
+		renderPass_ = engine.renderPass_;
 
 		images_ = device_.getSwapchainImagesKHR(swapchain_);
 
@@ -205,7 +140,15 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 		// Create Pipelinelayout
 		{
 			std::array<vk::DescriptorSetLayout,0> uniformLayouts {};
-			std::array<vk::PushConstantRange,0> pushConstants {};
+			std::array<vk::PushConstantRange,1> pushConstants {
+				{
+					{
+						vk::ShaderStageFlagBits::eVertex,
+						0,
+						sizeof(norView)
+					}
+				}
+			};
 			pipelineLayout_ = device_.createPipelineLayout(
 				{
 					{}, uniformLayouts, pushConstants
@@ -342,6 +285,7 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 			vertexBuffer_ = buffer;
 
 			memcpy(bufferAllocInfo_.pMappedData, &defaultVertices, sizeof(Vertex) * defaultVertices.size());
+			vmaFlushAllocation(engine_.vma_, bufferAlloc_, bufferAllocInfo_.offset, bufferAllocInfo_.size);
 		}
 
 		// Allocate command buffer
@@ -371,7 +315,6 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 		}
 		device_.destroy(pipeline_);
 		device_.destroy(pipelineLayout_);
-		device_.destroy(renderPass_);
 		for (const auto& imageV: imageViews_) {
 			device_.destroy(imageV);
 		}
@@ -381,6 +324,7 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 	bool Presenter::Run()
 	{
 		unsigned int theFrame = frameCnt % 2;
+		auto spin = glm::vec2{0.0f, 0.0f};
 
 		const auto& [renderComplete, imageAvailable, imageDone] = engine_.syncObjs_[theFrame];
 		auto result1 = device_.waitForFences(1, &imageDone, VK_TRUE, UINT64_MAX);
@@ -415,11 +359,10 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 				}
 			}};
 
-		auto vertices = static_cast<Vertex *>(bufferAllocInfo_.pMappedData);
-		float color = static_cast<float>(frameCnt % 240) / 120.0f;
-		if (color > 1.0f) color = 2.0f - color;
-		vertices[1].color = {color, 1.0f - color, 0.0f};
-		vertices[4].color = {color, 1.0f - color, 0.0f};
+		const auto & viewCenter = engine_.viewCenter_;
+		const auto & windowSize = engine_.winSize_;
+		norView[0] = static_cast<float>(viewCenter[0]) / static_cast<float>(windowSize[0]);
+		norView[1] = static_cast<float>(viewCenter[1]) / static_cast<float>(windowSize[1]);
 
 		cmdbuf.begin(vk::CommandBufferBeginInfo {});
 		cmdbuf.beginRenderPass(
@@ -438,6 +381,7 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 		std::array<vk::Buffer, 1> vertexBuffers = {{ vertexBuffer_ }};
 		std::array<vk::DeviceSize, 1> offsets = {{ 0 }};
 		cmdbuf.bindVertexBuffers(0, vertexBuffers, offsets);
+		cmdbuf.pushConstants(pipelineLayout_, vk::ShaderStageFlagBits::eVertex, 0, sizeof(norView), &norView);
 		cmdbuf.draw(6, 1, 0, 0);
 		cmdbuf.endRenderPass();
 		cmdbuf.end();
@@ -454,7 +398,8 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 				 signalS
 			 }}
 		};
-		device_.resetFences(1, &imageDone);
+		std::array<vk::Fence, 1> fenceReset = {{imageDone}};
+		device_.resetFences(fenceReset);
 		engine_.graphicsQ_.submit(submit, imageDone);
 		frameCnt++;
 		try {

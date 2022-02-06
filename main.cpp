@@ -19,7 +19,6 @@ int main()
 		}
 		return score;
 	});
-	baseEngine.initPresenter();
 	baseEngine.run();
 	return 0;
 }

@@ -20,7 +20,7 @@ namespace VulkanPlayground
 	{
 	public:
 		Presenter(const BaseEngine& engine, Presenter* oldPresenter);
-		~Presenter();
+		virtual ~Presenter();
 
 		Presenter(const Presenter&) = delete;
 		Presenter(Presenter&&) = delete;
@@ -49,7 +49,6 @@ namespace VulkanPlayground
 		std::array<vk::CommandBuffer, 2> cmdBuffer_;
 
 		vk::Extent2D extent_;
-		vk::Format format_;
 
 		unsigned int frameCnt;
 

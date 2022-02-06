@@ -12,7 +12,9 @@ add_library(BaseEngine OBJECT
         BaseEngine/Debug.cpp
         BaseEngine/ChosenGPU.cpp
         BaseEngine/Presenter.cpp
-        BaseEngine/DefaultPipeline.cpp)
+        BaseEngine/DefaultPipeline.cpp
+        BaseEngine/Scene.cpp
+        )
 target_link_libraries(BaseEngine
         SDL2::SDL2
         fmt::fmt
