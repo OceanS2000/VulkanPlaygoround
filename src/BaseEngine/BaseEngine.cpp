@@ -6,7 +6,7 @@
 
 #include <array>
 #include <chrono>
-#include <thread>
+#include <bits/this_thread_sleep.h>
 #include <vector>
 #include <stdexcept>
 
@@ -113,6 +113,7 @@ BaseEngine::~BaseEngine()
 
 	if (window_)
 		SDL_DestroyWindow(window_);
+	SDL_Quit();
 }
 
 void BaseEngine::run()
@@ -126,6 +127,7 @@ void BaseEngine::run()
 	using namespace std::chrono_literals;
 	auto lastframe = std::chrono::steady_clock::now();
 	auto targettime = 16.667ms;
+	bool resized = false;
 
 	while (true) {
 		while (SDL_PollEvent(&event)) {
@@ -136,63 +138,43 @@ void BaseEngine::run()
 				switch (event.window.event) {
 					case SDL_WINDOWEVENT_RESIZED:
 						winSize_ = {event.window.data1, event.window.data2};
-						initPresenter();
-						auto time = std::chrono::steady_clock::now();
-						std::this_thread::sleep_for(targettime - (time - lastframe));
 						lastframe = std::chrono::steady_clock::now();
-						continue;
-				}
-			case SDL_KEYDOWN:
-				switch (event.key.keysym.sym) {
-					case SDLK_DOWN:
-						arrowKey_[0] = true;
-						break;
-					case SDLK_UP:
-						arrowKey_[1] = true;
-						break;
-					case SDLK_LEFT:
-						arrowKey_[2] = true;
-						break;
-					case SDLK_RIGHT:
-						arrowKey_[3] = true;
-						break;
+						resized = true;
 				}
 				break;
+			case SDL_KEYDOWN:
+				arrowKey_[event.key.keysym.scancode] = true;
+				break;
 			case SDL_KEYUP:
-				switch (event.key.keysym.sym) {
-					case SDLK_DOWN:
-						arrowKey_[0] = false;
-						break;
-					case SDLK_UP:
-						arrowKey_[1] = false;
-						break;
-					case SDLK_LEFT:
-						arrowKey_[2] = false;
-						break;
-					case SDLK_RIGHT:
-						arrowKey_[3] = false;
-						break;
-				}
+				arrowKey_[event.key.keysym.scancode] = false;
 				break;
 			}
 		}
 
-		if (arrowKey_[0]) viewCenter_[1] -= 5;
-		if (arrowKey_[1]) viewCenter_[1] += 5;
-		if (arrowKey_[2]) viewCenter_[0] += 5;
-		if (arrowKey_[3]) viewCenter_[0] -= 5;
+		auto windowflags = SDL_GetWindowFlags(window_);
+		if (windowflags & SDL_WINDOW_MINIMIZED) continue;
+
+		if (arrowKey_[SDL_SCANCODE_DOWN]) viewCenter_[1] -= 5;
+		if (arrowKey_[SDL_SCANCODE_UP]) viewCenter_[1] += 5;
+		if (arrowKey_[SDL_SCANCODE_LEFT]) viewCenter_[0] += 5;
+		if (arrowKey_[SDL_SCANCODE_RIGHT]) viewCenter_[0] -= 5;
 		viewCenter_[0] = std::clamp(viewCenter_[0], -winSize_[0], winSize_[0]);
 		viewCenter_[1] = std::clamp(viewCenter_[1], -winSize_[1], winSize_[1]);
 
-		auto time = std::chrono::steady_clock::now();
-		std::this_thread::sleep_for(targettime - (time - lastframe));
-		lastframe = std::chrono::steady_clock::now();
-
-		if (presenter_->Run()){
-			auto windowflags = SDL_GetWindowFlags(window_);
-			if (windowflags & SDL_WINDOW_MINIMIZED) continue;
-			initPresenter();
+		auto now = std::chrono::steady_clock::now();
+		if (resized) {
+			if ((now - lastframe) < targettime) {
+				continue;
+			} else {
+				initPresenter();
+			}
+		} else {
+			std::this_thread::sleep_until(lastframe + 16ms);
 		}
+		while ((now = std::chrono::steady_clock::now()) - lastframe < targettime);
+		lastframe = now;
+
+		resized = presenter_->Run();
 	}
 }
 

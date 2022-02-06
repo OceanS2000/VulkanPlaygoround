@@ -57,7 +57,7 @@ namespace VulkanPlayground
 
 		std::unique_ptr<Presenter> presenter_;
 
-		std::bitset<4> arrowKey_;
+		std::bitset<SDL_NUM_SCANCODES> arrowKey_;
 		std::array<int, 2> winSize_ = {640, 480};
 		std::array<int, 2> viewCenter_ = {0, 0};
 

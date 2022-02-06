@@ -37,7 +37,7 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 		const auto& format = engine_.surfaceFmt_;
 
 		// Determine Present mode
-		auto presentMode = vk::PresentModeKHR::eMailbox;
+		auto presentMode = vk::PresentModeKHR::eImmediate;
 		{
 			using enum vk::PresentModeKHR;
 			const auto& presentSup = phyDevice.getSurfacePresentModesKHR(surface);
