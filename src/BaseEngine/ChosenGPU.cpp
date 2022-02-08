@@ -77,6 +77,8 @@ void BaseEngine::ChooseGPU(const std::function<int(const vk::PhysicalDevice&)>& 
 	});
 
 	{
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 		VmaVulkanFunctions vulkanFunc = {
 			.vkGetInstanceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetInstanceProcAddr,
 			.vkGetDeviceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetDeviceProcAddr
@@ -89,6 +91,7 @@ void BaseEngine::ChooseGPU(const std::function<int(const vk::PhysicalDevice&)>& 
 			.instance = instance_,
 			.vulkanApiVersion = VK_API_VERSION_1_2
 		};
+#pragma GCC diagnostic pop
 
 		const auto res = vmaCreateAllocator(&vmaCreat, &vma_);
 		if (res != VK_SUCCESS) {
@@ -110,10 +113,11 @@ void BaseEngine::ChooseGPU(const std::function<int(const vk::PhysicalDevice&)>& 
 	}
 
 	for (unsigned i = 0; i < imageCount_; i++) {
-		syncObjs_.push_back({
-								.renderComplete = device_.createSemaphore({}),
-								.imageAvailable = device_.createSemaphore({}),
-								.imageDone = device_.createFence({vk::FenceCreateFlagBits::eSignaled})
+		syncObjs_.push_back(
+			{
+				.renderComplete = device_.createSemaphore({}),
+				.imageAvailable = device_.createSemaphore({}),
+				.imageDone = device_.createFence({vk::FenceCreateFlagBits::eSignaled})
 		});
 	}
 
@@ -215,13 +219,11 @@ void BaseEngine::ChooseGPU(const std::function<int(const vk::PhysicalDevice&)>& 
 
 	// Create Pipelinelayout
 	{
-		std::array<vk::PushConstantRange,1> pushConstants {
-			{
-				{
+		std::array pushConstants {
+			vk::PushConstantRange {
 					vk::ShaderStageFlagBits::eVertex,
 					0,
 					sizeof(float) * 2
-				}
 			}
 		};
 		globalPipelineLayout_ = device_.createPipelineLayout(
