@@ -18,12 +18,12 @@ namespace VulkanPlayground
 
 constexpr static std::array<Vertex, 6> defaultVertices {
 	{
-		{{0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}},
-		{{0.0f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-		{{0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}},
-		{{0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}},
-		{{0.0f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-		{{0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}},
+		{{0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}},
+		{{0.0f, 0.5f}, {0.0f, 2.0f, 0.0f}},
+		{{0.5f, 0.0f}, {2.0f, 0.0f, 1.0f}},
+		{{0.5f, 0.0f}, {2.0f, 0.0f, 1.0f}},
+		{{0.0f, 0.5f}, {0.0f, 2.0f, 0.0f}},
+		{{0.5f, 0.5f}, {2.0f, 2.0f, 0.0f}},
 	}
 };
 
@@ -50,11 +50,11 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 			spdlog::debug("Using present mode {}", to_string(presentMode));
 		}
 
-		// Determine image extent and count
+		// Determine image extent
 		int w, h;
 		SDL_Vulkan_GetDrawableSize(engine_.window_, &w, &h);
 		extent_ = vk::Extent2D {(uint32_t)w, (uint32_t)h};
-		unsigned imgCnt;
+		unsigned imgCnt = engine_.imageCount_;
 
 		const auto surfaceCap = phyDevice.getSurfaceCapabilitiesKHR(surface);
 		{
@@ -62,12 +62,6 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 			const auto &minExt = surfaceCap.minImageExtent;
 			extent_.width = std::clamp(extent_.width, minExt.width, maxExt.width);
 			extent_.height = std::clamp(extent_.height, minExt.height, maxExt.height);
-
-			if (surfaceCap.maxImageCount < 2) {
-				spdlog::error("The device does not support for more than two images!");
-				std::terminate();
-			}
-			imgCnt = std::max(2u, surfaceCap.minImageCount);
 		}
 
 		// Create swapchain
@@ -137,23 +131,7 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 					}));
 		}
 
-		// Create Pipelinelayout
-		{
-			std::array<vk::DescriptorSetLayout,0> uniformLayouts {};
-			std::array<vk::PushConstantRange,1> pushConstants {
-				{
-					{
-						vk::ShaderStageFlagBits::eVertex,
-						0,
-						sizeof(norView)
-					}
-				}
-			};
-			pipelineLayout_ = device_.createPipelineLayout(
-				{
-					{}, uniformLayouts, pushConstants
-			});
-		}
+		pipelineLayout_ = engine_.globalPipelineLayout_;
 
 		// Create Graphics Pipeline
 		{
@@ -255,9 +233,8 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 			VmaAllocationCreateInfo vmalloc = {
 				.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT,
 				.usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-				.requiredFlags =
-					(VkMemoryPropertyFlags)(eHostCoherent | eHostVisible),
-				.preferredFlags = (VkMemoryPropertyFlags)(eDeviceLocal),
+				.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+//				.preferredFlags = (VkMemoryPropertyFlags)(eDeviceLocal),
 			};
 
 			auto bufferCreate = (VkBufferCreateInfo)vk::BufferCreateInfo {
@@ -314,7 +291,6 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 			device_.destroy(fb);
 		}
 		device_.destroy(pipeline_);
-		device_.destroy(pipelineLayout_);
 		for (const auto& imageV: imageViews_) {
 			device_.destroy(imageV);
 		}
@@ -381,6 +357,7 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 		std::array<vk::Buffer, 1> vertexBuffers = {{ vertexBuffer_ }};
 		std::array<vk::DeviceSize, 1> offsets = {{ 0 }};
 		cmdbuf.bindVertexBuffers(0, vertexBuffers, offsets);
+		cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout_, 0, 1, &engine_.globalDescriptors_[curimg%2], 0, nullptr);
 		cmdbuf.pushConstants(pipelineLayout_, vk::ShaderStageFlagBits::eVertex, 0, sizeof(norView), &norView);
 		cmdbuf.draw(6, 1, 0, 0);
 		cmdbuf.endRenderPass();

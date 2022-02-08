@@ -97,14 +97,25 @@ void BaseEngine::ChooseGPU(const std::function<int(const vk::PhysicalDevice&)>& 
 		}
 	}
 
-	for (auto& syncObj : syncObjs_) {
-		syncObj = {
-			.renderComplete = device_.createSemaphore({}),
-			.imageAvailable = device_.createSemaphore({}),
-			.imageDone = device_.createFence({vk::FenceCreateFlagBits::eSignaled})
-		};
+	// Determine Image Count
+	{
+		const auto surfaceCap = chosenGPU_.getSurfaceCapabilitiesKHR(surface_);
+
+		if (surfaceCap.maxImageCount < 2) {
+			spdlog::error("The device does not support for more than two images!");
+			std::terminate();
+		}
+
+		imageCount_ = std::max(2u, surfaceCap.minImageCount);
 	}
 
+	for (unsigned i = 0; i < imageCount_; i++) {
+		syncObjs_.push_back({
+								.renderComplete = device_.createSemaphore({}),
+								.imageAvailable = device_.createSemaphore({}),
+								.imageDone = device_.createFence({vk::FenceCreateFlagBits::eSignaled})
+		});
+	}
 
 	// Determine Surface Format
 	surfaceFmt_ = { vk::Format::eB8G8R8A8Unorm, vk::ColorSpaceKHR::eSrgbNonlinear };
@@ -171,6 +182,76 @@ void BaseEngine::ChooseGPU(const std::function<int(const vk::PhysicalDevice&)>& 
 			{
 				{}, attachment, subpass, dependency
 			});
+	}
+
+	{
+		texture_.push_back(std::move(TextureModule::uploadTexture("../assets/textures/IMG_0800.JPG", vma_, device_, graphicsQ_, graphicsCmdPool_)));
+		vk::SamplerCreateInfo samplerInfo;
+		sampler_ = device_.createSampler(samplerInfo);
+	}
+
+	{
+		std::array<vk::DescriptorPoolSize, 2> sizes {
+			{
+				{ vk::DescriptorType::eUniformBuffer, 10u },
+				{ vk::DescriptorType::eCombinedImageSampler, 10u }
+			}
+		};
+		descriptorPool_ = device_.createDescriptorPool({ vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet, 4, sizes });
+
+		std::array<vk::DescriptorSetLayoutBinding, 1> bindings {
+			{
+				{
+					0,
+					vk::DescriptorType::eCombinedImageSampler,
+					1,
+					vk::ShaderStageFlagBits::eFragment,
+					nullptr
+				}
+			}
+		};
+		globalDescriptorLayout_ = device_.createDescriptorSetLayout({ vk::DescriptorSetLayoutCreateFlags {}, bindings});
+	}
+
+	// Create Pipelinelayout
+	{
+		std::array<vk::PushConstantRange,1> pushConstants {
+			{
+				{
+					vk::ShaderStageFlagBits::eVertex,
+					0,
+					sizeof(float) * 2
+				}
+			}
+		};
+		globalPipelineLayout_ = device_.createPipelineLayout(
+			{
+				{}, globalDescriptorLayout_, pushConstants
+			});
+	}
+
+	// Allocator Descriptor Sets
+	{
+		std::vector<vk::DescriptorSetLayout> layouts(imageCount_, globalDescriptorLayout_);
+		globalDescriptors_ = device_.allocateDescriptorSets({descriptorPool_, layouts});
+
+		std::array<vk::DescriptorImageInfo, 1> images {
+			{
+				{
+					sampler_, texture_.front().textureView, vk::ImageLayout::eShaderReadOnlyOptimal
+				}
+			}
+		};
+		std::array<vk::WriteDescriptorSet, 2> updates;
+		for (unsigned i = 0 ; i < imageCount_; i++) {
+			auto& write = updates[i];
+			write.setDstSet(globalDescriptors_[i])
+				.setDstBinding(0).setDstArrayElement(0)
+				.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+				.setDescriptorCount(1)
+				.setPImageInfo(&images[0]);
+		}
+		device_.updateDescriptorSets(updates, {});
 	}
 
 	initPresenter();

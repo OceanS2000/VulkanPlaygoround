@@ -14,7 +14,7 @@
 #include <vk_mem_alloc.h>
 
 #include "ImgSyncer.hpp"
-#include "Scene.hpp"
+#include "TextureModule.hpp"
 
 namespace VulkanPlayground
 {
@@ -51,9 +51,18 @@ namespace VulkanPlayground
 		vk::CommandPool graphicsCmdPool_;
 		vk::RenderPass renderPass_;
 
-		std::array<ImgSyncer, 2> syncObjs_;
+		uint32_t imageCount_;
+		std::vector<ImgSyncer> syncObjs_;
 
 		VmaAllocator vma_;
+		std::vector<TextureModule> texture_;
+		vk::Sampler sampler_;
+
+		vk::DescriptorPool descriptorPool_;
+		vk::DescriptorSetLayout globalDescriptorLayout_;
+		std::vector<vk::DescriptorSet> globalDescriptors_;
+
+		vk::PipelineLayout globalPipelineLayout_;
 
 		std::unique_ptr<Presenter> presenter_;
 
@@ -61,7 +70,6 @@ namespace VulkanPlayground
 		std::array<int, 2> winSize_ = {640, 480};
 		std::array<int, 2> viewCenter_ = {0, 0};
 
-		friend Scene;
 		friend Presenter;
 	};
 }

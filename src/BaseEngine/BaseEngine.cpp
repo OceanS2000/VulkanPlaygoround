@@ -6,7 +6,11 @@
 
 #include <array>
 #include <chrono>
+#ifdef __GLIBCXX__
 #include <bits/this_thread_sleep.h>
+#else
+#include <thread>
+#endif
 #include <vector>
 #include <stdexcept>
 
@@ -103,8 +107,14 @@ BaseEngine::~BaseEngine()
 		device_.destroy(sem2);
 		device_.destroy(sem1);
 	}
+	for (auto& t : texture_)
+		t.destroy();
 	device_.destroy(renderPass_);
+	device_.destroy(globalPipelineLayout_);
 	device_.destroy(graphicsCmdPool_);
+	device_.destroy(sampler_);
+	device_.destroy(descriptorPool_);
+	device_.destroy(globalDescriptorLayout_);
 	vmaDestroyAllocator(vma_);
 	device_.destroy();
 	instance_.destroy(surface_);
@@ -126,7 +136,7 @@ void BaseEngine::run()
 
 	using namespace std::chrono_literals;
 	auto lastframe = std::chrono::steady_clock::now();
-	auto targettime = 16.667ms;
+	constexpr auto targettime = 16.667ms;
 	bool resized = false;
 
 	while (true) {
@@ -163,18 +173,20 @@ void BaseEngine::run()
 
 		auto now = std::chrono::steady_clock::now();
 		if (resized) {
-			if ((now - lastframe) < targettime) {
+			if ((now - lastframe) < 100ms) {
 				continue;
 			} else {
 				initPresenter();
 			}
-		} else {
-			std::this_thread::sleep_until(lastframe + 16ms);
 		}
 		while ((now = std::chrono::steady_clock::now()) - lastframe < targettime);
 		lastframe = now;
 
 		resized = presenter_->Run();
+
+		if (!resized) {
+			std::this_thread::sleep_until(lastframe + 15.55ms);
+		}
 	}
 }
 

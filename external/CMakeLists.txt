@@ -6,3 +6,8 @@ target_compile_definitions(vma PRIVATE
         VMA_DYNAMIC_VULKAN_FUNCTIONS=1)
 target_include_directories(vma PUBLIC
         vma)
+
+add_library(stb STATIC
+        stb/stb_image.c)
+target_include_directories(stb PUBLIC
+        stb)
