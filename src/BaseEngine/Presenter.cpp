@@ -31,6 +31,47 @@ constexpr static std::array<uint32_t, 6> defaultIndexes {
 	0, 1, 2, 2, 1, 3
 };
 
+template<typename T, glm::qualifier Q>
+constexpr inline glm::mat<4, 4, T, Q> lookat(glm::vec<3, T, Q> const& eye, glm::vec<3, T, Q> const& center, glm::vec<3, T, Q> const& up)
+{
+	using namespace glm;
+	vec<3, T, Q> const f(normalize(center - eye));
+	vec<3, T, Q> const s(normalize(cross(f, up)));
+	vec<3, T, Q> const u(cross(s, f));
+
+	mat<4, 4, T, Q> Result(1);
+	Result[0][0] = s.x;
+	Result[1][0] = s.y;
+	Result[2][0] = s.z;
+	Result[0][1] =-u.x;
+	Result[1][1] =-u.y;
+	Result[2][1] =-u.z;
+	Result[0][2] = f.x;
+	Result[1][2] = f.y;
+	Result[2][2] = f.z;
+	Result[3][0] =-dot(s, eye);
+	Result[3][1] = dot(u, eye);
+	Result[3][2] =-dot(f, eye);
+	return Result;
+}
+
+template<typename T>
+constexpr inline glm::mat<4, 4, T, glm::defaultp> perspect(T fovy, T aspect, T zNear, T zFar)
+{
+	using namespace glm;
+	assert(abs(aspect - std::numeric_limits<T>::epsilon()) > static_cast<T>(0));
+
+	T const tanHalfFovy = tan(radians(fovy) / static_cast<T>(2));
+
+	mat<4, 4, T, defaultp> Result(static_cast<T>(0));
+	Result[0][0] = static_cast<T>(1) / (aspect * tanHalfFovy);
+	Result[1][1] = static_cast<T>(1) / (tanHalfFovy);
+	Result[2][2] = zFar / (zFar - zNear);
+	Result[2][3] = static_cast<T>(1);
+	Result[3][2] = -(zFar * zNear) / (zFar - zNear);
+	return Result;
+}
+
 static glm::vec2 norCenter;
 
 Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
@@ -182,7 +223,8 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 			};
 
 			vk::PipelineRasterizationStateCreateInfo rasterization;
-			rasterization.setCullMode(vk::CullModeFlagBits::eNone);
+			rasterization.setCullMode(vk::CullModeFlagBits::eBack);
+			rasterization.setFrontFace(vk::FrontFace::eCounterClockwise);
 			rasterization.setLineWidth(1.0f);
 
 			vk::PipelineMultisampleStateCreateInfo multisample;
@@ -370,14 +412,17 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 
 		// Update View Uniform
 		{
-			glm::mat4 proj = glm::perspective(
-				glm::radians(90.0f), ((float)extent_.width)/((float)extent_.height), 0.1f, 2.0f);
-			glm::mat4 view = glm::lookAt(
+			glm::mat4 view2 = lookat(
 				glm::vec3(0, 0, 0), glm::vec3(1, 0, 0), glm::vec3(0, 0, 1)
-				);
+			);
+			float aspect = (float)extent_.width/(float)extent_.height;
+			glm::mat4 proj2 = perspect(
+				90.0f, aspect, 0.5f, 10.0f
+			);
+
 			void* uniform;
 			vmaMapMemory(engine_.vma_, engine_.viewAlloc_, &uniform);
-			*(glm::mat4 *)uniform = glm::diagonal4x4(glm::vec4(1.0f, -1.0f, 1.0f, 1.0f)) * proj * view;
+			*(glm::mat4 *)uniform = proj2 * view2;
 			vmaUnmapMemory(engine_.vma_, engine_.viewAlloc_);
 		}
 	}

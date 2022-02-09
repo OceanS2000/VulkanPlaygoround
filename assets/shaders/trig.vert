@@ -14,6 +14,6 @@ layout(binding = 1) uniform UBO {
 };
 
 void main() {
-    gl_Position = persMat * vec4(1.0, inPosition - viewCenter, 1.0);
+    gl_Position = persMat * vec4(1.0, inPosition + viewCenter, 1.0);
     uv = vec2(inColor);
 }

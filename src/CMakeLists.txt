@@ -28,6 +28,7 @@ target_include_directories(BaseEngine PUBLIC
         )
 target_compile_definitions(BaseEngine PUBLIC
         VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
+        GLM_FORCE_DEPTH_ZERO_TO_ONE
         )
 target_precompile_headers(BaseEngine PRIVATE
         <algorithm>
