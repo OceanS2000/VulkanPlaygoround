@@ -43,8 +43,10 @@ namespace VulkanPlayground
 		vk::Pipeline pipeline_;
 
 		vk::Buffer vertexBuffer_;
-		VmaAllocation bufferAlloc_;
-		VmaAllocationInfo bufferAllocInfo_;
+		VmaAllocation vertexBufferAlloc_;
+
+		vk::Buffer indexBuffer_;
+		VmaAllocation indexBufferAlloc_;
 
 		std::array<vk::CommandBuffer, 2> cmdBuffer_;
 

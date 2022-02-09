@@ -109,6 +109,7 @@ BaseEngine::~BaseEngine()
 	}
 	for (auto& t : texture_)
 		t.destroy();
+	vmaDestroyBuffer(vma_, view_, viewAlloc_);
 	device_.destroy(renderPass_);
 	device_.destroy(globalPipelineLayout_);
 	device_.destroy(graphicsCmdPool_);
@@ -166,10 +167,10 @@ void BaseEngine::run()
 
 		if (arrowKey_[SDL_SCANCODE_DOWN]) viewCenter_[1] -= 5;
 		if (arrowKey_[SDL_SCANCODE_UP]) viewCenter_[1] += 5;
-		if (arrowKey_[SDL_SCANCODE_LEFT]) viewCenter_[0] += 5;
-		if (arrowKey_[SDL_SCANCODE_RIGHT]) viewCenter_[0] -= 5;
-		viewCenter_[0] = std::clamp(viewCenter_[0], -winSize_[0], winSize_[0]);
-		viewCenter_[1] = std::clamp(viewCenter_[1], -winSize_[1], winSize_[1]);
+		if (arrowKey_[SDL_SCANCODE_LEFT]) viewCenter_[0] -= 5;
+		if (arrowKey_[SDL_SCANCODE_RIGHT]) viewCenter_[0] += 5;
+		viewCenter_[0] = std::clamp(viewCenter_[0], -100, 100);
+		viewCenter_[1] = std::clamp(viewCenter_[1], -100, 100);
 
 		auto now = std::chrono::steady_clock::now();
 		if (resized) {

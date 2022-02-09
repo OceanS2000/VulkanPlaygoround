@@ -9,6 +9,7 @@
 
 #include <SDL_vulkan.h>
 #include <spdlog/spdlog.h>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include "BaseEngine.hpp"
 #include "ShaderModule.hpp"
@@ -16,15 +17,17 @@
 namespace VulkanPlayground
 {
 
-constexpr static std::array<Vertex, 6> defaultVertices {
+constexpr static std::array<Vertex, 4> defaultVertices {
 	{
-		{{0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}},
-		{{0.0f, 0.5f}, {0.0f, 2.0f, 0.0f}},
-		{{0.5f, 0.0f}, {2.0f, 0.0f, 1.0f}},
-		{{0.5f, 0.0f}, {2.0f, 0.0f, 1.0f}},
-		{{0.0f, 0.5f}, {0.0f, 2.0f, 0.0f}},
-		{{0.5f, 0.5f}, {2.0f, 2.0f, 0.0f}},
+		{{-0.5f, -0.5f}, {2.0f, 0.0f, 0.0f}},
+		{{-0.5f,  0.5f}, {2.0f, 2.0f, 0.0f}},
+		{{ 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}},
+		{{ 0.5f,  0.5f}, {0.0f, 2.0f, -0.5f}},
 	}
+};
+
+constexpr static std::array<uint32_t, 6> defaultIndexes {
+	0, 1, 2, 2, 1, 3
 };
 
 static glm::vec2 norView;
@@ -178,6 +181,7 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 			};
 
 			vk::PipelineRasterizationStateCreateInfo rasterization;
+			rasterization.setCullMode(vk::CullModeFlagBits::eNone);
 			rasterization.setLineWidth(1.0f);
 
 			vk::PipelineMultisampleStateCreateInfo multisample;
@@ -234,7 +238,7 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 				.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT,
 				.usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
 				.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-//				.preferredFlags = (VkMemoryPropertyFlags)(eDeviceLocal),
+				.preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 			};
 
 			auto bufferCreate = (VkBufferCreateInfo)vk::BufferCreateInfo {
@@ -245,13 +249,14 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 			};
 
 			VkBuffer buffer;
+			VmaAllocationInfo bufferAllocInfo;
 			auto result = vmaCreateBuffer(
 				engine_.vma_,
 				&bufferCreate,
 				&vmalloc,
 				&buffer,
-				&bufferAlloc_,
-				&bufferAllocInfo_
+				&vertexBufferAlloc_,
+				&bufferAllocInfo
 				);
 
 			if (result != VK_SUCCESS) {
@@ -261,8 +266,88 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 
 			vertexBuffer_ = buffer;
 
-			memcpy(bufferAllocInfo_.pMappedData, &defaultVertices, sizeof(Vertex) * defaultVertices.size());
-			vmaFlushAllocation(engine_.vma_, bufferAlloc_, bufferAllocInfo_.offset, bufferAllocInfo_.size);
+			memcpy(bufferAllocInfo.pMappedData, &defaultVertices, sizeof(Vertex) * defaultVertices.size());
+			vmaFlushAllocation(engine_.vma_, vertexBufferAlloc_, bufferAllocInfo.offset, bufferAllocInfo.size);
+		}
+
+		// Allocate Index buffer
+		{
+			VkBuffer staging;
+			VmaAllocation stagingAlloc;
+			VmaAllocationInfo stagingAllocInfo;
+
+			const auto stagingCreate = VkBufferCreateInfo {
+				.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+				.size = defaultIndexes.size() * sizeof(defaultIndexes[0]),
+				.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+				.sharingMode = VK_SHARING_MODE_EXCLUSIVE
+			};
+			const VmaAllocationCreateInfo stagingAllocCreate = {
+				.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT,
+				.usage = VMA_MEMORY_USAGE_CPU_ONLY,
+				.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+			};
+
+			auto result = vmaCreateBuffer(
+				engine_.vma_,
+				&stagingCreate,
+				&stagingAllocCreate,
+				&staging,
+				&stagingAlloc,
+				&stagingAllocInfo
+			);
+			if (result != VK_SUCCESS) {
+				spdlog::error("Falied to allocate buffer");
+				std::terminate();
+			}
+			const size_t indexsize = sizeof(defaultIndexes[0]) * defaultIndexes.size();
+			memcpy(stagingAllocInfo.pMappedData, &defaultIndexes, indexsize);
+
+
+			VkBuffer index;
+
+			const auto indexCreate = VkBufferCreateInfo {
+				.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+				.size = defaultIndexes.size() * sizeof(defaultIndexes[0]),
+				.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+				.sharingMode = VK_SHARING_MODE_EXCLUSIVE
+			};
+			const VmaAllocationCreateInfo indexAllocCreate = {
+				.usage = VMA_MEMORY_USAGE_GPU_ONLY,
+				.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+			};
+
+			result = vmaCreateBuffer(
+				engine_.vma_,
+				&indexCreate,
+				&indexAllocCreate,
+				&index,
+				&indexBufferAlloc_,
+				nullptr
+			);
+			if (result != VK_SUCCESS) {
+				vmaDestroyBuffer(engine_.vma_, staging, stagingAlloc);
+				spdlog::error("Falied to allocate buffer");
+				std::terminate();
+			}
+
+			const auto& cmdbufAlloc = device_.allocateCommandBuffers(
+				{
+					engine_.graphicsCmdPool_,
+					vk::CommandBufferLevel::ePrimary,
+					1
+				}
+				);
+			const auto& cmdbuf = cmdbufAlloc.front();
+			cmdbuf.begin(vk::CommandBufferBeginInfo {});
+			cmdbuf.copyBuffer(staging, index, { { 0, 0, indexsize } });
+			cmdbuf.end();
+			engine_.graphicsQ_.submit({ {{}, {}, cmdbufAlloc, {}} });
+			engine_.graphicsQ_.waitIdle();
+
+			indexBuffer_ = index;
+			vmaDestroyBuffer(engine_.vma_, staging, stagingAlloc);
+			device_.freeCommandBuffers(engine_.graphicsCmdPool_, cmdbufAlloc);
 		}
 
 		// Allocate command buffer
@@ -281,12 +366,26 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 				std::terminate();
 			}
 		}
+
+		// Update View Uniform
+		{
+			glm::mat4 proj = glm::perspective(
+				glm::radians(90.0f), ((float)extent_.width)/((float)extent_.height), 0.1f, 2.0f);
+			glm::mat4 view = glm::lookAt(
+				glm::vec3(0, 0, 0), glm::vec3(1, 0, 0), glm::vec3(0, 0, 1)
+				);
+			void* uniform;
+			vmaMapMemory(engine_.vma_, engine_.viewAlloc_, &uniform);
+			*(glm::mat4 *)uniform = proj * view;
+			vmaUnmapMemory(engine_.vma_, engine_.viewAlloc_);
+		}
 	}
 
 	Presenter::~Presenter()
 	{
 		device_.waitIdle();
-		vmaDestroyBuffer(engine_.vma_, (VkBuffer)vertexBuffer_, bufferAlloc_);
+		vmaDestroyBuffer(engine_.vma_, (VkBuffer)indexBuffer_, indexBufferAlloc_);
+		vmaDestroyBuffer(engine_.vma_, (VkBuffer)vertexBuffer_, vertexBufferAlloc_);
 		for (auto & fb : swapchainFramebuffer_) {
 			device_.destroy(fb);
 		}
@@ -357,9 +456,10 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 		std::array<vk::Buffer, 1> vertexBuffers = {{ vertexBuffer_ }};
 		std::array<vk::DeviceSize, 1> offsets = {{ 0 }};
 		cmdbuf.bindVertexBuffers(0, vertexBuffers, offsets);
+		cmdbuf.bindIndexBuffer(indexBuffer_, 0u, vk::IndexType::eUint32);
 		cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout_, 0, 1, &engine_.globalDescriptors_[curimg%2], 0, nullptr);
 		cmdbuf.pushConstants(pipelineLayout_, vk::ShaderStageFlagBits::eVertex, 0, sizeof(norView), &norView);
-		cmdbuf.draw(6, 1, 0, 0);
+		cmdbuf.drawIndexed(6, 1, 0, 0, 0);
 		cmdbuf.endRenderPass();
 		cmdbuf.end();
 

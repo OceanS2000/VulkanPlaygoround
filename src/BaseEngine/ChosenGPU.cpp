@@ -189,29 +189,60 @@ void BaseEngine::ChooseGPU(const std::function<int(const vk::PhysicalDevice&)>& 
 	}
 
 	{
-		texture_.push_back(std::move(TextureModule::uploadTexture("../assets/textures/IMG_0800.JPG", vma_, device_, graphicsQ_, graphicsCmdPool_)));
+		texture_.push_back(TextureModule::uploadTexture("../assets/textures/IMG_0800.JPG", vma_, device_, graphicsQ_, graphicsCmdPool_));
 		vk::SamplerCreateInfo samplerInfo;
+		samplerInfo.setMagFilter(vk::Filter::eLinear);
 		sampler_ = device_.createSampler(samplerInfo);
+
+		VkBuffer uniform;
+		const auto uniformCreate = VkBufferCreateInfo {
+			.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+			.size = sizeof(glm::mat4),
+			.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			.sharingMode = VK_SHARING_MODE_EXCLUSIVE
+		};
+		const auto uniformAllocCreate = VmaAllocationCreateInfo {
+			.usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+			.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			.preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+		};
+		auto result = vmaCreateBuffer(
+			vma_,
+			&uniformCreate,
+			&uniformAllocCreate,
+			&uniform,
+			&viewAlloc_,
+			nullptr
+			);
+		if (result != VK_SUCCESS) {
+			spdlog::error("Falied to allocate buffer");
+			std::terminate();
+		}
+
+		view_ = uniform;
 	}
 
 	{
-		std::array<vk::DescriptorPoolSize, 2> sizes {
-			{
-				{ vk::DescriptorType::eUniformBuffer, 10u },
-				{ vk::DescriptorType::eCombinedImageSampler, 10u }
-			}
+		std::array sizes {
+			vk::DescriptorPoolSize { vk::DescriptorType::eUniformBuffer, 10u },
+			vk::DescriptorPoolSize { vk::DescriptorType::eCombinedImageSampler, 10u }
 		};
 		descriptorPool_ = device_.createDescriptorPool({ vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet, 4, sizes });
 
-		std::array<vk::DescriptorSetLayoutBinding, 1> bindings {
-			{
-				{
-					0,
-					vk::DescriptorType::eCombinedImageSampler,
-					1,
-					vk::ShaderStageFlagBits::eFragment,
-					nullptr
-				}
+		std::array bindings {
+			vk::DescriptorSetLayoutBinding {
+				0,
+				vk::DescriptorType::eCombinedImageSampler,
+				1,
+				vk::ShaderStageFlagBits::eFragment,
+				nullptr
+			},
+			vk::DescriptorSetLayoutBinding {
+				1,
+				vk::DescriptorType::eUniformBuffer,
+				1,
+				vk::ShaderStageFlagBits::eVertex,
+				nullptr
 			}
 		};
 		globalDescriptorLayout_ = device_.createDescriptorSetLayout({ vk::DescriptorSetLayoutCreateFlags {}, bindings});
@@ -244,6 +275,13 @@ void BaseEngine::ChooseGPU(const std::function<int(const vk::PhysicalDevice&)>& 
 				}
 			}
 		};
+		std::array<vk::DescriptorBufferInfo, 1> uniforms {
+			{
+				{
+					view_, 0, sizeof(glm::mat4)
+				}
+			}
+		};
 		std::array<vk::WriteDescriptorSet, 2> updates;
 		for (unsigned i = 0 ; i < imageCount_; i++) {
 			auto& write = updates[i];
@@ -252,6 +290,15 @@ void BaseEngine::ChooseGPU(const std::function<int(const vk::PhysicalDevice&)>& 
 				.setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
 				.setDescriptorCount(1)
 				.setPImageInfo(&images[0]);
+		}
+		device_.updateDescriptorSets(updates, {});
+		for (unsigned i = 0 ; i < imageCount_; i++) {
+			auto& write = updates[i];
+			write.setDstSet(globalDescriptors_[i])
+				.setDstBinding(1).setDstArrayElement(0)
+				.setDescriptorType(vk::DescriptorType::eUniformBuffer)
+				.setDescriptorCount(1)
+				.setPBufferInfo(&uniforms[0]);
 		}
 		device_.updateDescriptorSets(updates, {});
 	}

@@ -9,7 +9,11 @@ layout(push_constant) uniform constants {
     vec2 viewCenter;
 };
 
+layout(binding = 1) uniform UBO {
+    mat4 persMat;
+};
+
 void main() {
-    gl_Position = vec4(inPosition - viewCenter, 0.0, 1.0);
+    gl_Position = persMat * vec4(1.0, inPosition - viewCenter, 1.0);
     uv = vec2(inColor);
 }

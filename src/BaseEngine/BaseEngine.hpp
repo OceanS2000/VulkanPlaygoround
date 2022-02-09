@@ -55,8 +55,12 @@ namespace VulkanPlayground
 		std::vector<ImgSyncer> syncObjs_;
 
 		VmaAllocator vma_;
+
 		std::vector<TextureModule> texture_;
 		vk::Sampler sampler_;
+
+		vk::Buffer view_;
+		VmaAllocation viewAlloc_;
 
 		vk::DescriptorPool descriptorPool_;
 		vk::DescriptorSetLayout globalDescriptorLayout_;
