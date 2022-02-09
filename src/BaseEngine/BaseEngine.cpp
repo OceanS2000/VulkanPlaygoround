@@ -165,12 +165,12 @@ void BaseEngine::run()
 		auto windowflags = SDL_GetWindowFlags(window_);
 		if (windowflags & SDL_WINDOW_MINIMIZED) continue;
 
-		if (arrowKey_[SDL_SCANCODE_DOWN]) viewCenter_[1] -= 5;
-		if (arrowKey_[SDL_SCANCODE_UP]) viewCenter_[1] += 5;
-		if (arrowKey_[SDL_SCANCODE_LEFT]) viewCenter_[0] -= 5;
-		if (arrowKey_[SDL_SCANCODE_RIGHT]) viewCenter_[0] += 5;
-		viewCenter_[0] = std::clamp(viewCenter_[0], -100, 100);
-		viewCenter_[1] = std::clamp(viewCenter_[1], -100, 100);
+		if (arrowKey_[SDL_SCANCODE_DOWN]) modelCenter_[1] -= 5;
+		if (arrowKey_[SDL_SCANCODE_UP]) modelCenter_[1] += 5;
+		if (arrowKey_[SDL_SCANCODE_LEFT]) modelCenter_[0] += 5;
+		if (arrowKey_[SDL_SCANCODE_RIGHT]) modelCenter_[0] -= 5;
+		modelCenter_[0] = std::clamp(modelCenter_[0], -100, 100);
+		modelCenter_[1] = std::clamp(modelCenter_[1], -100, 100);
 
 		auto now = std::chrono::steady_clock::now();
 		if (resized) {

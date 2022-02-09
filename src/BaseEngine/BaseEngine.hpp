@@ -72,7 +72,7 @@ namespace VulkanPlayground
 
 		std::bitset<SDL_NUM_SCANCODES> arrowKey_;
 		std::array<int, 2> winSize_ = {640, 480};
-		std::array<int, 2> viewCenter_ = {0, 0};
+		std::array<int, 2> modelCenter_ = {0, 0};
 
 		friend Presenter;
 	};

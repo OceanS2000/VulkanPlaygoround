@@ -9,6 +9,7 @@
 
 #include <SDL_vulkan.h>
 #include <spdlog/spdlog.h>
+#include <glm/gtx/matrix_operation.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "BaseEngine.hpp"
@@ -19,10 +20,10 @@ namespace VulkanPlayground
 
 constexpr static std::array<Vertex, 4> defaultVertices {
 	{
-		{{-0.5f, -0.5f}, {2.0f, 0.0f, 0.0f}},
-		{{-0.5f,  0.5f}, {2.0f, 2.0f, 0.0f}},
-		{{ 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}},
-		{{ 0.5f,  0.5f}, {0.0f, 2.0f, -0.5f}},
+		{{-0.5f, -0.5f}, {2.0f, 2.0f, 1.0f}},
+		{{-0.5f,  0.5f}, {2.0f, 0.0f, 1.0f}},
+		{{ 0.5f, -0.5f}, {0.0f, 2.0f, 1.0f}},
+		{{ 0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}},
 	}
 };
 
@@ -30,7 +31,7 @@ constexpr static std::array<uint32_t, 6> defaultIndexes {
 	0, 1, 2, 2, 1, 3
 };
 
-static glm::vec2 norView;
+static glm::vec2 norCenter;
 
 Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 	: engine_(engine), device_(engine_.device_)
@@ -376,7 +377,7 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 				);
 			void* uniform;
 			vmaMapMemory(engine_.vma_, engine_.viewAlloc_, &uniform);
-			*(glm::mat4 *)uniform = proj * view;
+			*(glm::mat4 *)uniform = glm::diagonal4x4(glm::vec4(1.0f, -1.0f, 1.0f, 1.0f)) * proj * view;
 			vmaUnmapMemory(engine_.vma_, engine_.viewAlloc_);
 		}
 	}
@@ -434,10 +435,9 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 				}
 			}};
 
-		const auto & viewCenter = engine_.viewCenter_;
-		const auto & windowSize = engine_.winSize_;
-		norView[0] = static_cast<float>(viewCenter[0]) / static_cast<float>(windowSize[0]);
-		norView[1] = static_cast<float>(viewCenter[1]) / static_cast<float>(windowSize[1]);
+		const auto & viewCenter = engine_.modelCenter_;
+		norCenter[0] = static_cast<float>(viewCenter[0]) / 100.0f;
+		norCenter[1] = static_cast<float>(viewCenter[1]) / 100.0f;
 
 		cmdbuf.begin(vk::CommandBufferBeginInfo {});
 		cmdbuf.beginRenderPass(
@@ -458,7 +458,7 @@ Presenter::Presenter(const BaseEngine& engine, Presenter* oldPresenter)
 		cmdbuf.bindVertexBuffers(0, vertexBuffers, offsets);
 		cmdbuf.bindIndexBuffer(indexBuffer_, 0u, vk::IndexType::eUint32);
 		cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout_, 0, 1, &engine_.globalDescriptors_[curimg%2], 0, nullptr);
-		cmdbuf.pushConstants(pipelineLayout_, vk::ShaderStageFlagBits::eVertex, 0, sizeof(norView), &norView);
+		cmdbuf.pushConstants(pipelineLayout_, vk::ShaderStageFlagBits::eVertex, 0, sizeof(norCenter), &norCenter);
 		cmdbuf.drawIndexed(6, 1, 0, 0, 0);
 		cmdbuf.endRenderPass();
 		cmdbuf.end();
